@@ -6,6 +6,7 @@ import torch.optim as optim
 import os
 import matplotlib.pyplot as plt
 import numpy as np
+import predata
 
 # ============================= #
 # you can define your own model #
@@ -29,9 +30,9 @@ class LeNet(nn.Module):
         self.batch2 = nn.BatchNorm2d(16)
         self.conv2 = nn.Conv2d(6, 16, 5)
         self.fc1 = nn.Linear(16 * 29 * 29, 120)
-        self.dropout = nn.Dropout(0.4)
+        self.dropout = nn.Dropout(0.3)
         self.fc2 = nn.Linear(120, 84)
-        self.dropout2 = nn.Dropout(0.2)
+        self.dropout2 = nn.Dropout(0.3)
         self.fc3 = nn.Linear(84, 10)
         self.relu = nn.ReLU()
         
@@ -64,6 +65,7 @@ class ChineseOCR(object):
         self.getModel()
         #self.train_acc = self.train()
         #self.saveModel()
+        self.loadModel('model.pt')
         self.test()
 
         self.showWeights()
@@ -106,7 +108,7 @@ class ChineseOCR(object):
 
         # TODO
         self.trainset = torchvision.datasets.ImageFolder("dataset", transform= transform_train)
-        self.testset = torchvision.datasets.ImageFolder("dataset", transform= transform_train)
+        self.testset = torchvision.datasets.ImageFolder("testset", transform= transform_train)
 
         self.trainloader = torch.utils.data.DataLoader(self.trainset, batch_size=self.batch_size, shuffle=True)
         self.testloader = torch.utils.data.DataLoader(self.testset, batch_size=self.batch_size, shuffle=False)
@@ -123,7 +125,53 @@ class ChineseOCR(object):
         self.criterion = nn.CrossEntropyLoss()
         self.optimizer = optim.SGD(self.net.parameters(), lr=self.lr, momentum=0.9)
         return
+        
+    def train(self):
+        print('Training model...')
+        # Change all model tensor into cuda type
+        # something like weight & bias are the tensor 
+        self.net = self.net.to(self.device) 
+        
+        # Set the model in training mode
+        # because some function like: dropout, batchnorm...etc, will have 
+        # different behaviors in training/evaluation mode
+        # [document]: https://pytorch.org/docs/stable/nn.html#torch.nn.Module.train
+        self.net.train()
+        for e in range(self.epoch):  # loop over the dataset multiple times
+            running_loss = 0.0
+            correct = 0
+            for i, (inputs, labels) in enumerate(self.trainloader, 0):
+                
+                #change the type into cuda tensor 
+                inputs = inputs.to(self.device) 
+                labels = labels.to(self.device) 
 
+                # zero the parameter gradients
+                self.optimizer.zero_grad()
+
+                # forward + backward + optimize
+                outputs = self.net(inputs)
+                # select the class with highest probability
+                _, pred = outputs.max(1)
+                # if the model predicts the same results as the true
+                # label, then the correct counter will plus 1
+                correct += pred.eq(labels).sum().item()
+                
+                loss = self.criterion(outputs, labels)
+                
+                loss.backward()
+                self.optimizer.step()
+
+                # print statistics
+                running_loss += loss.item()
+                if i % 100 == 99:    # print every 200 mini-batches
+                    print('[%d, %5d] loss: %.3f' %
+                          (e + 1, i + 1, running_loss / 100))
+                    running_loss = 0.0
+
+            print('%d epoch, training accuracy: %.4f' % (e+1, 100.*correct/len(self.trainset)))
+        print('Finished Training')
+        return 100.*correct/len(self.trainset)
 
     def test(self):
         print('==> Testing model..')
@@ -142,25 +190,23 @@ class ChineseOCR(object):
         class_total = [0 for i in range(len(self.classes))]
         with torch.no_grad(): # no need to keep the gradient for backpropagation
             for data in self.testloader:
-                images, labels= data
+                images, labels = data
                 images = images.to(self.device) 
                 labels = labels.to(self.device)
                 outputs = self.net(images)
                 _, pred = outputs.max(1)
                 correct += pred.eq(labels).sum().item()
                 c_eachlabel = pred.eq(labels).squeeze()
-                
                 loss = self.criterion(outputs, labels)
                 iter_count += 1
                 running_loss += loss.item()
                 for i in range(len(labels)):
                     cur_label = labels[i].item()
                     try:
-                        k = c_eachlabel[i].item()    #新增k儲存
-                        class_correct[cur_label] += k   #原本寫class_correct[cur_label] += c_eachlabel[i].item()
+                        class_correct[cur_label] += c_eachlabel[i].item()
                     except:
                         print(class_correct[cur_label])
-                        print(k)
+                        print(c_eachlabel[i].item())
                     class_total[cur_label] += 1
 
         #print('Total accuracy is: {:4f}% and loss is: {:3.3f}'.format(100 * correct/len(self.testset), running_loss/iter_count))
@@ -238,5 +284,5 @@ class ChineseOCR(object):
 
 if __name__ == '__main__':
     # you can adjust your hyperperamers
-    
-    ocr = ChineseOCR('./data', 100, 40, 0.001)
+    #predata.prepare_data()
+    ocr = ChineseOCR('./data', 100, 30, 0.002)

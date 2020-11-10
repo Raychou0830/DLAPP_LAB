@@ -1,0 +1,9 @@
+classes=36
+
+train  = C:/Users/Ray/Desktop/car/train.txt
+
+valid  = C:/Users/Ray/Desktop/car/test.txt
+
+names = C:/Users/Ray/Desktop/car/cfg/obj.names
+
+backup = car/weights/
